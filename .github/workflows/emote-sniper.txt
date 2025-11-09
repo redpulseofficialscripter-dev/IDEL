@@ -1,0 +1,73 @@
+name: EmoteSniper Auto Update
+
+on:
+  schedule:
+    # Каждые 5 минут
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  update-emotes:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Run EmoteSniper
+        run: |
+          echo "🚀 Starting EmoteSniper update..."
+          node run.js
+      
+      - name: Check for changes
+        id: git-check
+        run: |
+          git diff --name-only | grep -E '(EmoteSniper|AnimationSniper)\.json' && echo "changes=true" >> $GITHUB_OUTPUT || echo "changes=false" >> $GITHUB_OUTPUT
+      
+      - name: Commit and push changes
+        if: steps.git-check.outputs.changes == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add EmoteSniper.json AnimationSniper.json
+          git commit -m "🤖 Auto update emotes - $(date '+%Y-%m-%d %H:%M:%S UTC')"
+          git push
+      
+      - name: Log completion
+        run: |
+          echo "📊 Update Results:"
+          if [ -f "EmoteSniper.json" ]; then
+            EMOTE_TOTAL=$(jq '.totalItems' EmoteSniper.json)
+            EMOTE_UPDATE=$(jq -r '.lastUpdate' EmoteSniper.json)
+            echo "🎭 EmoteSniper: $EMOTE_TOTAL items (updated: $EMOTE_UPDATE)"
+          else
+            echo "❌ EmoteSniper.json not found"
+          fi
+          
+          if [ -f "AnimationSniper.json" ]; then
+            ANIM_TOTAL=$(jq '.totalItems' AnimationSniper.json)
+            ANIM_UPDATE=$(jq -r '.lastUpdate' AnimationSniper.json)
+            echo "🎬 AnimationSniper: $ANIM_TOTAL items (updated: $ANIM_UPDATE)"
+          else
+            echo "❌ AnimationSniper.json not found"
+          fi
+          
+          if [ "${{ steps.git-check.outputs.changes }}" == "true" ]; then
+            echo "✅ Changes detected and committed"
+          else
+            echo "ℹ️ No changes detected"
+          fi
